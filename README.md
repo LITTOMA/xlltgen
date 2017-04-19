@@ -2,5 +2,5 @@
 
 Generate Text Filter Files (XLLT Files) for Nintendo's FontConverter.
 
-#Requirement
+# Requirement
 Python 2.7
