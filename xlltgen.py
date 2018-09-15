@@ -2,8 +2,7 @@ import os,sys,codecs
 from fnmatch import fnmatch
 from optparse import OptionParser
 
-BLACK_LIST = [u'\u0000', u'\u001e']
-MODES = ['file', 'dir']
+BLACK_LIST = [u'\u0000', u'\u001e', u'\ufeff', u'\u000a', u'\u000d']
 
 def walk(dirname):
     filelist = []
@@ -47,6 +46,18 @@ def scanfiles(paths, fext):
     result.sort()
     return ''.join(result)
 
+def savecharset(path, charset):
+    s = u''
+    i = 0
+    for c in charset:
+        s += c
+        i += 1
+        if i == 16:
+            s += '\n'
+            i = 0
+    codecs.open(path, 'w', 'utf-8-sig').write(s)
+    print 'Save:', path
+
 def genxllt(charset, title='Default'):
     xllt = '''<?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE letter-list SYSTEM "letter-list.dtd">
@@ -78,15 +89,40 @@ def genxllt(charset, title='Default'):
 '''
     return xllt
 
+
+def vararg_callback(option, opt_str, value, parser):
+    assert value is None
+    value = []
+
+    def floatable(str):
+        try:
+            float(str)
+            return True
+        except ValueError:
+            return False
+
+    for arg in parser.rargs:
+        # stop on --foo like options
+        if arg[:2] == "--" and len(arg) > 2:
+            break
+        # stop on -a, but not on -3 or -3.0
+        if arg[:1] == "-" and len(arg) > 1 and not floatable(arg):
+            break
+        value.append(arg)
+
+    del parser.rargs[:len(value)]
+    setattr(parser.values, option.dest, value)
+
+
 def parse_options():
     parser = OptionParser()
-    parser.add_option('-m', type='string', dest='mode', help='Set scan mode.(file/dir)')
+    parser.add_option("-f", "--files", dest="files", action="callback", callback=vararg_callback)
     parser.add_option('-e', type='string', dest='ext', default='*.txt', help='Set scan file extention.')
-    parser.add_option('-i', type='string', dest='input', help='Set input path.')
     parser.add_option('-o', type='string', dest='output', help='Set output path.')
     parser.add_option('-t', type='string', dest='title', default='Default', help='Set title.')
+    parser.add_option('-x', type='string', dest='charset', help='Save charset.')
     (options, args) = parser.parse_args()
-    if((not options.mode) or (not options.input)) or (not (options.mode in MODES)):
+    if not options.files:
         parser.print_help()
         return None
     return options
@@ -95,18 +131,11 @@ def main():
     options = parse_options()
     if not options:
         return False
-    if options.mode == 'file':
-        if os.path.isdir(options.input):
-            print 'Input is not a file.'
-            return False
-        codecs.open(options.output, 'w', 'utf-8-sig').write(genxllt(scanfile(options.input), options.title))
-        return True
-    if options.mode == 'dir':
-        if os.path.isfile(options.input):
-            print 'Input is not a directory.'
-            return False
-        codecs.open(options.output, 'w', 'utf-8-sig').write(genxllt(scanfiles(walk(options.input), options.ext), options.title))
-        return True
+    charset = scanfiles(options.files, options.ext)
+    
+    codecs.open(options.output, 'w', 'utf-8-sig').write(genxllt(charset, options.title))
+    if options.charset:
+        savecharset(options.charset, charset)
 
 
 if __name__ == '__main__':
