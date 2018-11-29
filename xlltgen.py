@@ -1,6 +1,6 @@
 import os,sys,codecs
 from fnmatch import fnmatch
-from optparse import OptionParser
+import argparse
 
 BLACK_LIST = [u'\u0000', u'\u001e', u'\ufeff', u'\u000a', u'\u000d']
 
@@ -34,11 +34,13 @@ def scanfile(path):
     charset.sort()
     return charset
 
-def scanfiles(paths, fext):
+def scanfiles(paths, exts):
     charset = []
     for path in paths:
-        if fnmatch(path, fext):
-            charset.extend(scanfile(path))
+        for fext in exts:
+            if fnmatch(path, fext):
+                charset.extend(scanfile(path))
+                break
     result = []
     for c in charset:
         if (not c in result) and (not c in BLACK_LIST):
@@ -89,51 +91,23 @@ def genxllt(charset, title='Default'):
 '''
     return xllt
 
-
-def vararg_callback(option, opt_str, value, parser):
-    assert value is None
-    value = []
-
-    def floatable(str):
-        try:
-            float(str)
-            return True
-        except ValueError:
-            return False
-
-    for arg in parser.rargs:
-        # stop on --foo like options
-        if arg[:2] == "--" and len(arg) > 2:
-            break
-        # stop on -a, but not on -3 or -3.0
-        if arg[:1] == "-" and len(arg) > 1 and not floatable(arg):
-            break
-        value.append(arg)
-
-    del parser.rargs[:len(value)]
-    setattr(parser.values, option.dest, value)
-
-
 def parse_options():
-    parser = OptionParser()
-    parser.add_option("-f", "--files", dest="files", action="callback", callback=vararg_callback)
-    parser.add_option('-e', type='string', dest='ext', default='*.txt', help='Set scan file extention.')
-    parser.add_option('-o', type='string', dest='output', help='Set output path.')
-    parser.add_option('-t', type='string', dest='title', default='Default', help='Set title.')
-    parser.add_option('-x', type='string', dest='charset', help='Save charset.')
-    (options, args) = parser.parse_args()
-    if not options.files:
-        parser.print_help()
-        return None
-    return options
+    parser = argparse.ArgumentParser(description="Nintendo CTR Font Converter Text Filter(xllt) Generator.")
+    parser.add_argument('-f', '--files', help="Files to scan.", required=True, nargs='*', type=str)
+    parser.add_argument('-e', '--extensions', help="Set extensions.", default=["*.txt"], nargs='*', type=str)
+    parser.add_argument('-o', '--output', help="Set output file path.")
+    parser.add_argument('-t', '--title', help="Set title.", default='Default filter')
+    parser.add_argument('-x', '--charset', help="Set raw charset path. If not set, the charset will not save.", default=None)
+    return parser.parse_args()
 
 def main():
     options = parse_options()
     if not options:
         return False
-    charset = scanfiles(options.files, options.ext)
+    charset = scanfiles(options.files, options.extensions)
     
-    codecs.open(options.output, 'w', 'utf-8-sig').write(genxllt(charset, options.title))
+    if options.output:
+        codecs.open(options.output, 'w', 'utf-8-sig').write(genxllt(charset, options.title))
     if options.charset:
         savecharset(options.charset, charset)
 
